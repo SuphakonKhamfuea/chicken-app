@@ -4,123 +4,141 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chicken Breeding Record</title>
-    <!-- Google Fonts: Prompt สำหรับภาษาไทยที่อ่านง่าย ทันสมัย -->
+    
+    <!-- ฟอนต์และ CSS -->
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Prompt', 'sans-serif'] },
-                    colors: {
-                        brand: {
-                            green: '#1F4E3D', // เขียวเข้ม
-                            cream: '#F9F6F0', // ครีม
-                            brown: '#5C4033', // น้ำตาลเข้ม
-                            accent: '#D4A373' // น้ำตาลทอง
-                        }
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Prompt', 'sans-serif'] }, colors: { brand: { green: '#1F4E3D', cream: '#F9F6F0', brown: '#5C4033', accent: '#D4A373' } } } } }
     </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style> body { background-color: #e5e5e5; } .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } </style>
+
     <!-- React & Babel -->
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-    <!-- FontAwesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body { background-color: #e5e5e5; }
-        /* ซ่อน Scrollbar แต่ยังเลื่อนได้ */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
+
+    <!-- 🌟 เพิ่มระบบหลังบ้าน Firebase 🌟 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <script>
+        // กุญแจ Firebase ของคุณ
+        const firebaseConfig = {
+            apiKey: "AIzaSyDAXCIbU6EFl0jsq1Q7CzXN32SqLgLDP3E",
+            authDomain: "chicken-record.firebaseapp.com",
+            projectId: "chicken-record",
+            storageBucket: "chicken-record.firebasestorage.app",
+            messagingSenderId: "560218459515",
+            appId: "1:560218459515:web:1bec99f7b1e15718afc1de"
+        };
+        // เริ่มต้นการทำงานระบบ
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+    </script>
 </head>
 <body class="flex justify-center">
 
 <div id="root" class="w-full max-w-md h-screen bg-brand-cream relative overflow-hidden shadow-2xl flex flex-col"></div>
 
 <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
-
-    // --- ข้อมูลจำลองเริ่มต้น ---
-    const initialData = [
-        { id: '1', ringNumber: '001', name: 'เจ้ามน', type: 'พ่อพันธุ์', breed: 'พม่าสายตี', fatherId: '', motherId: '', birthDate: '2023-01-15', notes: 'ตีแม่น จ่ายลูกเก่ง', images: ['https://images.unsplash.com/photo-1548550023-2bf3c49b3380?auto=format&fit=crop&w=300&q=80'] },
-        { id: '2', ringNumber: '002', name: 'แม่แดง', type: 'แม่พันธุ์', breed: 'ง่อน', fatherId: '', motherId: '', birthDate: '2023-03-20', notes: 'โครงสร้างดี', images: ['https://images.unsplash.com/photo-1604040599573-8fb571d607eb?auto=format&fit=crop&w=300&q=80'] },
-        { id: '3', ringNumber: '101', name: 'ไอ้จุก', type: 'ลูกไก่', breed: 'พม่า-ง่อน', fatherId: '1', motherId: '2', birthDate: '2024-05-10', notes: 'ทรงดีตั้งแต่เล็ก', images: [] }
-    ];
+    const { useState, useEffect } = React;
 
     function App() {
-        // --- State Management ---
-        const [chickens, setChickens] = useState(initialData);
-        const [currentTab, setCurrentTab] = useState('home'); // home, parents, bands, settings
-        const [view, setView] = useState({ name: 'home', params: null }); // จัดการหน้าย่อย (add, detail)
+        const [chickens, setChickens] = useState([]); // เริ่มต้นด้วยข้อมูลว่างเปล่า (รอโหลดจากคลาวด์)
+        const [currentTab, setCurrentTab] = useState('home');
+        const [view, setView] = useState({ name: 'home', params: null });
         const [searchQuery, setSearchQuery] = useState('');
+        const [isSaving, setIsSaving] = useState(false); // สถานะกำลังบันทึก
 
-        // --- Helper Functions ---
-        const navigateTo = (viewName, params = null) => setView({ name: viewName, params });
+        // 🌟 ฟังก์ชันดึงข้อมูลจาก Database 🌟
+        useEffect(() => {
+            const unsubscribe = db.collection("chickens").onSnapshot((snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setChickens(data);
+            });
+            return () => unsubscribe();
+        }, []);
+
+        const navigateTo = (viewName, params = null) => {
+            setView({ name: viewName, params });
+            if (['home', 'parents', 'bands', 'settings'].includes(viewName)) setCurrentTab(viewName);
+        };
         
-        const saveChicken = (data) => {
-            if (data.id) {
-                setChickens(chickens.map(c => c.id === data.id ? data : c));
-            } else {
-                setChickens([...chickens, { ...data, id: Date.now().toString() }]);
+        // 🌟 ฟังก์ชันบันทึกข้อมูลและอัปโหลดรูปขึ้น Storage 🌟
+        const saveChicken = async (data) => {
+            setIsSaving(true);
+            try {
+                let imageUrls = data.images || [];
+                
+                // ถ้ารูปภาพเป็นรูปใหม่ (มาจากในเครื่อง) ให้เปลี่ยนรูปเป็นลิงก์ Cloud ก่อน
+                if (imageUrls.length > 0 && imageUrls[0].startsWith('data:image')) {
+                    const storageRef = storage.ref();
+                    const fileRef = storageRef.child(`chicken_images/${Date.now()}.jpg`);
+                    const response = await fetch(imageUrls[0]);
+                    const blob = await response.blob();
+                    await fileRef.put(blob);
+                    const url = await fileRef.getDownloadURL();
+                    imageUrls = [url]; // แทนที่ด้วยลิงก์รูปของจริง
+                }
+
+                const chickenData = { ...data, images: imageUrls };
+                delete chickenData.id; // เอา id ออกก่อนบันทึกลงฐานข้อมูล
+
+                if (data.id) {
+                    await db.collection("chickens").doc(data.id).update(chickenData);
+                } else {
+                    await db.collection("chickens").add(chickenData);
+                }
+                navigateTo('home');
+            } catch (error) {
+                alert("เกิดข้อผิดพลาด! กรุณาตรวจสอบว่าเปิดฐานข้อมูลโหมดทดสอบแล้วหรือยัง");
+                console.error(error);
             }
-            navigateTo('home');
+            setIsSaving(false);
         };
 
-        const deleteChicken = (id) => {
-            if(confirm('ต้องการลบข้อมูลนี้ใช่หรือไม่?')) {
-                setChickens(chickens.filter(c => c.id !== id));
+        // 🌟 ฟังก์ชันลบข้อมูล 🌟
+        const deleteChicken = async (id) => {
+            if(confirm('ต้องการลบข้อมูลนี้ใช่หรือไม่? ข้อมูลจะหายไปถาวร')) {
+                await db.collection("chickens").doc(id).delete();
                 navigateTo('home');
             }
         };
 
-        // --- Components ย่อย ---
-        
-        // 1. Header & Search
         const TopBar = ({ title, showBack }) => (
             <div class="bg-brand-green text-white p-4 pt-6 rounded-b-2xl shadow-md z-10 flex items-center justify-between">
                 {showBack ? (
-                    <button onClick={() => navigateTo('home')} class="text-xl px-2"><i class="fa-solid fa-chevron-left"></i></button>
-                ) : <div></div>}
-                <h1 class="text-xl font-semibold tracking-wide">{title}</h1>
-                <div></div>
+                    <button onClick={() => navigateTo('home')} class="text-xl px-2 w-10 text-left"><i class="fa-solid fa-chevron-left"></i></button>
+                ) : <div class="w-10"></div>}
+                <h1 class="text-xl font-semibold tracking-wide flex-1 text-center">{title}</h1>
+                <div class="w-10"></div>
             </div>
         );
 
-        // 2. Dashboard (หน้าหลัก)
         const Dashboard = () => {
-            const filtered = chickens.filter(c => c.name.includes(searchQuery) || c.ringNumber.includes(searchQuery));
+            const filtered = chickens.filter(c => (c.name && c.name.includes(searchQuery)) || (c.ringNumber && c.ringNumber.includes(searchQuery)));
             return (
                 <div class="flex-1 overflow-y-auto no-scrollbar pb-24 bg-brand-cream">
                     <TopBar title="Chicken Record" showBack={false} />
-                    
-                    {/* Search */}
                     <div class="px-4 -mt-5 relative z-20">
                         <div class="bg-white rounded-full shadow-lg flex items-center p-3 px-5 border border-gray-100">
                             <i class="fa-solid fa-search text-gray-400 mr-3"></i>
-                            <input 
-                                type="text" 
-                                placeholder="ค้นหาชื่อ, กิ๊ฟปีก..." 
-                                class="w-full outline-none text-brand-brown"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                            <input type="text" placeholder="ค้นหาชื่อ, กิ๊ฟปีก..." class="w-full outline-none text-brand-brown"
+                                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                         </div>
                     </div>
-
-                    {/* Menu Grid */}
                     <div class="p-4 grid grid-cols-2 gap-4 mt-4">
                         {[
-                            { title: 'กิ๊ฟปีกทั้งหมด', icon: 'fa-tags', color: 'text-blue-600', count: chickens.length },
-                            { title: 'พ่อพันธุ์', icon: 'fa-mars', color: 'text-brand-green', count: chickens.filter(c=>c.type==='พ่อพันธุ์').length },
-                            { title: 'แม่พันธุ์', icon: 'fa-venus', color: 'text-pink-600', count: chickens.filter(c=>c.type==='แม่พันธุ์').length },
-                            { title: 'ลูกไก่', icon: 'fa-egg', color: 'text-brand-accent', count: chickens.filter(c=>c.type==='ลูกไก่').length }
+                            { id: 'bands', title: 'กิ๊ฟปีกทั้งหมด', icon: 'fa-tags', color: 'text-blue-600', count: chickens.length },
+                            { id: 'parents', title: 'พ่อพันธุ์', icon: 'fa-mars', color: 'text-brand-green', count: chickens.filter(c=>c.type==='พ่อพันธุ์').length },
+                            { id: 'parents', title: 'แม่พันธุ์', icon: 'fa-venus', color: 'text-pink-600', count: chickens.filter(c=>c.type==='แม่พันธุ์').length },
+                            { id: 'home', title: 'ลูกไก่', icon: 'fa-egg', color: 'text-brand-accent', count: chickens.filter(c=>c.type==='ลูกไก่').length }
                         ].map(menu => (
-                            <button key={menu.title} class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 active:scale-95 transition">
+                            <button key={menu.title} onClick={() => navigateTo(menu.id)} class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 active:scale-95 transition">
                                 <div class={`w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-2xl ${menu.color}`}>
                                     <i class={`fa-solid ${menu.icon}`}></i>
                                 </div>
@@ -129,25 +147,68 @@
                             </button>
                         ))}
                     </div>
-
-                    {/* Recent List */}
                     <div class="px-4 mt-2">
                         <h2 class="text-brand-brown font-semibold mb-3">บันทึกล่าสุด</h2>
-                        <div class="space-y-3">
-                            {filtered.map(c => (
-                                <div key={c.id} onClick={() => navigateTo('detail', c.id)} class="bg-white p-3 rounded-xl shadow-sm flex items-center gap-4 cursor-pointer active:bg-gray-50 border border-gray-100">
-                                    <div class="w-16 h-16 rounded-lg bg-gray-20 overflow-hidden flex-shrink-0 border border-gray-200">
-                                        {c.images && c.images.length > 0 ? 
-                                            <img src={c.images[0]} class="w-full h-full object-cover" /> : 
-                                            <div class="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400"><i class="fa-solid fa-camera"></i></div>
-                                        }
-                                    </div>
-                                    <div class="flex-1">
-                                        <div class="flex justify-between items-start">
-                                            <h3 class="font-semibold text-brand-brown text-lg">{c.name || 'ไม่มีชื่อ'}</h3>
-                                            <span class="text-xs font-medium bg-brand-cream text-brand-brown px-2 py-1 rounded-md">#{c.ringNumber}</span>
+                        {chickens.length === 0 ? (
+                            <div class="text-center text-gray-400 mt-10">ยังไม่มีข้อมูลไก่ กด + เพื่อเพิ่มข้อมูลแรกเลย!</div>
+                        ) : (
+                            <div class="space-y-3">
+                                {filtered.map(c => (
+                                    <div key={c.id} onClick={() => navigateTo('detail', c.id)} class="bg-white p-3 rounded-xl shadow-sm flex items-center gap-4 cursor-pointer active:bg-gray-50 border border-gray-100">
+                                        <div class="w-16 h-16 rounded-lg bg-gray-20 overflow-hidden flex-shrink-0 border border-gray-200">
+                                            {c.images && c.images.length > 0 ? 
+                                                <img src={c.images[0]} class="w-full h-full object-cover" /> : 
+                                                <div class="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400"><i class="fa-solid fa-camera"></i></div>
+                                            }
                                         </div>
-                                        <p class="text-sm text-gray-500">{c.type} • {c.breed}</p>
+                                        <div class="flex-1">
+                                            <div class="flex justify-between items-start">
+                                                <h3 class="font-semibold text-brand-brown text-lg">{c.name || 'ไม่มีชื่อ'}</h3>
+                                                <span class="text-xs font-medium bg-brand-cream text-brand-brown px-2 py-1 rounded-md">#{c.ringNumber}</span>
+                                            </div>
+                                            <p class="text-sm text-gray-500">{c.type} • {c.breed}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const ParentsView = () => {
+            const fathers = chickens.filter(c => c.type === 'พ่อพันธุ์');
+            const mothers = chickens.filter(c => c.type === 'แม่พันธุ์');
+
+            return (
+                <div class="flex-1 flex flex-col h-full bg-brand-cream">
+                    <TopBar title="ข้อมูลพ่อ-แม่พันธุ์" showBack={false} />
+                    <div class="flex-1 overflow-y-auto p-4 pb-24 flex gap-4">
+                        <div class="flex-1 space-y-3">
+                            <div class="bg-brand-green text-white text-center py-2 rounded-xl font-semibold shadow-sm text-sm"><i class="fa-solid fa-mars mr-2"></i>พ่อพันธุ์</div>
+                            {fathers.map(c => (
+                                <div key={c.id} onClick={() => navigateTo('detail', c.id)} class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer active:bg-gray-50">
+                                    <div class="w-20 h-20 rounded-full bg-gray-100 overflow-hidden border-2 border-brand-green">
+                                        {c.images && c.images.length > 0 ? <img src={c.images[0]} class="w-full h-full object-cover" /> : <div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-mars text-3xl text-brand-green opacity-50"></i></div>}
+                                    </div>
+                                    <div class="text-center w-full">
+                                        <h3 class="font-semibold text-brand-brown leading-tight truncate">{c.name || 'ไม่มีชื่อ'}</h3>
+                                        <div class="mt-1"><span class="text-[10px] bg-brand-cream text-brand-brown px-2 py-0.5 rounded-full border border-gray-200">#{c.ringNumber}</span></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div class="flex-1 space-y-3">
+                            <div class="bg-pink-600 text-white text-center py-2 rounded-xl font-semibold shadow-sm text-sm"><i class="fa-solid fa-venus mr-2"></i>แม่พันธุ์</div>
+                            {mothers.map(c => (
+                                <div key={c.id} onClick={() => navigateTo('detail', c.id)} class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer active:bg-gray-50">
+                                    <div class="w-20 h-20 rounded-full bg-gray-100 overflow-hidden border-2 border-pink-500">
+                                        {c.images && c.images.length > 0 ? <img src={c.images[0]} class="w-full h-full object-cover" /> : <div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-venus text-3xl text-pink-500 opacity-50"></i></div>}
+                                    </div>
+                                    <div class="text-center w-full">
+                                        <h3 class="font-semibold text-brand-brown leading-tight truncate">{c.name || 'ไม่มีชื่อ'}</h3>
+                                        <div class="mt-1"><span class="text-[10px] bg-pink-50 text-pink-700 px-2 py-0.5 rounded-full border border-pink-100">#{c.ringNumber}</span></div>
                                     </div>
                                 </div>
                             ))}
@@ -157,31 +218,20 @@
             );
         };
 
-        // 3. ฟอร์มเพิ่ม/แก้ไขข้อมูล
         const AddForm = ({ initialValues = {} }) => {
-            const [formData, setFormData] = useState({
-                ringNumber: '', name: '', type: 'ลูกไก่', breed: '', fatherId: '', motherId: '', birthDate: '', notes: '', images: [], ...initialValues
-            });
+            const [formData, setFormData] = useState({ ringNumber: '', name: '', type: 'ลูกไก่', breed: '', fatherId: '', motherId: '', birthDate: '', notes: '', images: [], ...initialValues });
 
             return (
                 <div class="flex-1 flex flex-col h-full bg-brand-cream">
                     <TopBar title={formData.id ? "แก้ไขข้อมูล" : "เพิ่มข้อมูลใหม่"} showBack={true} />
                     <div class="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
-                        
-                        {/* อัปโหลดรูปภาพ (ใช้งานได้จริง) */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
-                            <input 
-                                type="file" 
-                                id="imageUpload" 
-                                accept="image/*" 
-                                class="hidden" 
+                            <input type="file" id="imageUpload" accept="image/*" class="hidden" 
                                 onChange={(e) => {
                                     const file = e.target.files[0];
                                     if (file) {
                                         const reader = new FileReader();
-                                        reader.onloadend = () => {
-                                            setFormData({...formData, images: [reader.result]});
-                                        };
+                                        reader.onloadend = () => setFormData({...formData, images: [reader.result]});
                                         reader.readAsDataURL(file);
                                     }
                                 }} 
@@ -190,94 +240,46 @@
                                 {formData.images && formData.images.length > 0 ? (
                                     <div class="relative w-32 h-32 mx-auto mb-2">
                                         <img src={formData.images[0]} class="w-full h-full object-cover rounded-xl border border-gray-200 shadow-sm" />
-                                        <div class="absolute -top-2 -right-2 bg-brand-accent text-white w-8 h-8 rounded-full flex items-center justify-center shadow-md">
-                                            <i class="fa-solid fa-pen text-xs"></i>
-                                        </div>
+                                        <div class="absolute -top-2 -right-2 bg-brand-accent text-white w-8 h-8 rounded-full flex items-center justify-center shadow-md"><i class="fa-solid fa-pen text-xs"></i></div>
                                     </div>
                                 ) : (
-                                    <div class="w-24 h-24 mx-auto rounded-full bg-gray-50 flex items-center justify-center text-brand-green mb-2 border-2 border-dashed border-brand-green bg-opacity-10">
-                                        <i class="fa-solid fa-camera text-2xl"></i>
-                                    </div>
+                                    <div class="w-24 h-24 mx-auto rounded-full bg-gray-50 flex items-center justify-center text-brand-green mb-2 border-2 border-dashed border-brand-green bg-opacity-10"><i class="fa-solid fa-camera text-2xl"></i></div>
                                 )}
-                                <span class="text-sm text-brand-green font-medium">
-                                    {formData.images && formData.images.length > 0 ? 'เปลี่ยนรูปภาพ' : '+ เพิ่มรูปภาพ'}
-                                </span>
+                                <span class="text-sm text-brand-green font-medium">{formData.images && formData.images.length > 0 ? 'เปลี่ยนรูปภาพ' : '+ เพิ่มรูปภาพ'}</span>
                             </label>
                         </div>
 
-
-                        {/* ฟอร์มข้อมูล */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4 text-brand-brown">
-                            <div>
-                                <label class="block text-sm font-medium mb-1">หมายเลขกิ๊ฟปีก *</label>
-                                <input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-green" 
-                                    value={formData.ringNumber} onChange={e => setFormData({...formData, ringNumber: e.target.value})} placeholder="เช่น 00125" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1">ชื่อไก่</label>
-                                <input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-green" 
-                                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                            </div>
+                            <div><label class="block text-sm font-medium mb-1">หมายเลขกิ๊ฟปีก *</label><input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none" value={formData.ringNumber} onChange={e => setFormData({...formData, ringNumber: e.target.value})} placeholder="เช่น 00125" /></div>
+                            <div><label class="block text-sm font-medium mb-1">ชื่อไก่</label><input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
                             <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">สถานะ</label>
-                                    <select class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-green bg-white"
-                                        value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
-                                        <option>ลูกไก่</option>
-                                        <option>พ่อพันธุ์</option>
-                                        <option>แม่พันธุ์</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">สายเลือด/สายพันธุ์</label>
-                                    <input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none" 
-                                        value={formData.breed} onChange={e => setFormData({...formData, breed: e.target.value})} />
-                                </div>
+                                <div><label class="block text-sm font-medium mb-1">สถานะ</label><select class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}><option>ลูกไก่</option><option>พ่อพันธุ์</option><option>แม่พันธุ์</option></select></div>
+                                <div><label class="block text-sm font-medium mb-1">สายเลือด/สายพันธุ์</label><input type="text" class="w-full border border-gray-300 rounded-lg p-3 outline-none" value={formData.breed} onChange={e => setFormData({...formData, breed: e.target.value})} /></div>
                             </div>
                         </div>
 
-                        {/* ข้อมูลสายเลือด */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4">
                             <h3 class="font-medium text-brand-green border-b pb-2 mb-2"><i class="fa-solid fa-network-wired mr-2"></i>สายเลือด</h3>
-                            <div>
-                                <label class="block text-sm font-medium mb-1 text-brand-brown">พ่อพันธุ์</label>
-                                <select class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white"
-                                    value={formData.fatherId} onChange={e => setFormData({...formData, fatherId: e.target.value})}>
-                                    <option value="">-- ไม่ระบุ --</option>
-                                    {chickens.filter(c => c.type === 'พ่อพันธุ์').map(c => <option key={c.id} value={c.id}>{c.name} ({c.ringNumber})</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1 text-brand-brown">แม่พันธุ์</label>
-                                <select class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white"
-                                    value={formData.motherId} onChange={e => setFormData({...formData, motherId: e.target.value})}>
-                                    <option value="">-- ไม่ระบุ --</option>
-                                    {chickens.filter(c => c.type === 'แม่พันธุ์').map(c => <option key={c.id} value={c.id}>{c.name} ({c.ringNumber})</option>)}
-                                </select>
-                            </div>
+                            <div><label class="block text-sm font-medium mb-1 text-brand-brown">พ่อพันธุ์</label><select class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white" value={formData.fatherId} onChange={e => setFormData({...formData, fatherId: e.target.value})}><option value="">-- ไม่ระบุ --</option>{chickens.filter(c => c.type === 'พ่อพันธุ์').map(c => <option key={c.id} value={c.id}>{c.name} ({c.ringNumber})</option>)}</select></div>
+                            <div><label class="block text-sm font-medium mb-1 text-brand-brown">แม่พันธุ์</label><select class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white" value={formData.motherId} onChange={e => setFormData({...formData, motherId: e.target.value})}><option value="">-- ไม่ระบุ --</option>{chickens.filter(c => c.type === 'แม่พันธุ์').map(c => <option key={c.id} value={c.id}>{c.name} ({c.ringNumber})</option>)}</select></div>
                         </div>
 
-                        {/* หมายเหตุ */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                             <label class="block text-sm font-medium mb-1 text-brand-brown">หมายเหตุ / ลักษณะเด่น</label>
-                            <textarea rows="4" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-green"
-                                value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="พิมพ์รายละเอียด..."></textarea>
+                            <textarea rows="4" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-green" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="พิมพ์รายละเอียด..."></textarea>
                         </div>
                         
-                        <button onClick={() => saveChicken(formData)} class="w-full bg-brand-green text-white font-semibold text-lg p-4 rounded-xl shadow-lg active:scale-95 transition">
-                            <i class="fa-solid fa-save mr-2"></i> บันทึกข้อมูล
+                        <button onClick={() => saveChicken(formData)} disabled={isSaving} class={`w-full text-white font-semibold text-lg p-4 rounded-xl shadow-lg transition ${isSaving ? 'bg-gray-400' : 'bg-brand-green active:scale-95'}`}>
+                            {isSaving ? 'กำลังบันทึกข้อมูล...' : <><i class="fa-solid fa-save mr-2"></i> บันทึกข้อมูล</>}
                         </button>
                         {formData.id && (
-                             <button onClick={() => deleteChicken(formData.id)} class="w-full bg-red-50 text-red-600 font-semibold text-lg p-4 rounded-xl border border-red-200 mt-2">
-                             ลบข้อมูล
-                         </button>
+                             <button onClick={() => deleteChicken(formData.id)} disabled={isSaving} class="w-full bg-red-50 text-red-600 font-semibold text-lg p-4 rounded-xl border border-red-200 mt-2">ลบข้อมูล</button>
                         )}
                     </div>
                 </div>
             );
         };
 
-        // 4. หน้ารายละเอียดไก่ (Profile)
         const ChickenDetail = ({ id }) => {
             const c = chickens.find(x => x.id === id);
             if(!c) return <div>ไม่พบข้อมูล</div>;
@@ -288,124 +290,49 @@
 
             return (
                 <div class="flex-1 flex flex-col h-full bg-brand-cream">
-                    {/* ภาพ Cover */}
                     <div class="relative h-64 bg-gray-800">
-                        {c.images && c.images.length > 0 ? (
-                            <img src={c.images[0]} class="w-full h-full object-cover opacity-80" />
-                        ) : (
-                            <div class="w-full h-full flex items-center justify-center text-white"><i class="fa-solid fa-image text-4xl opacity-30"></i></div>
-                        )}
-                        <button onClick={() => navigateTo('home')} class="absolute top-6 left-4 w-10 h-10 bg-black bg-opacity-40 text-white rounded-full backdrop-blur flex items-center justify-center">
-                            <i class="fa-solid fa-chevron-left"></i>
-                        </button>
-                        <button onClick={() => navigateTo('add', c)} class="absolute top-6 right-4 w-10 h-10 bg-black bg-opacity-40 text-white rounded-full backdrop-blur flex items-center justify-center">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        
+                        {c.images && c.images.length > 0 ? <img src={c.images[0]} class="w-full h-full object-cover opacity-80" /> : <div class="w-full h-full flex items-center justify-center text-white"><i class="fa-solid fa-image text-4xl opacity-30"></i></div>}
+                        <button onClick={() => navigateTo('home')} class="absolute top-6 left-4 w-10 h-10 bg-black bg-opacity-40 text-white rounded-full backdrop-blur flex items-center justify-center"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button onClick={() => navigateTo('add', c)} class="absolute top-6 right-4 w-10 h-10 bg-black bg-opacity-40 text-white rounded-full backdrop-blur flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
                         <div class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black to-transparent text-white">
                             <div class="flex justify-between items-end">
-                                <div>
-                                    <h1 class="text-3xl font-bold">{c.name || 'ไม่มีชื่อ'}</h1>
-                                    <p class="opacity-90">{c.breed}</p>
-                                </div>
-                                <div class="bg-brand-green px-3 py-1 rounded-lg text-sm font-semibold shadow-md">
-                                    กิ๊ฟ: {c.ringNumber}
-                                </div>
+                                <div class="w-2/3"><h1 class="text-3xl font-bold truncate">{c.name || 'ไม่มีชื่อ'}</h1><p class="opacity-90">{c.breed}</p></div>
+                                <div class="bg-brand-green px-3 py-1 rounded-lg text-sm font-semibold shadow-md shrink-0">กิ๊ฟ: {c.ringNumber}</div>
                             </div>
                         </div>
                     </div>
-
                     <div class="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
-                        {/* Info Card */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between text-center text-brand-brown divide-x">
-                            <div class="flex-1">
-                                <p class="text-xs text-gray-500 mb-1">สถานะ</p>
-                                <p class="font-medium">{c.type}</p>
-                            </div>
-                            <div class="flex-1">
-                                <p class="text-xs text-gray-500 mb-1">วันเกิด</p>
-                                <p class="font-medium">{c.birthDate || '-'}</p>
-                            </div>
-                            <div class="flex-1">
-                                <p class="text-xs text-gray-500 mb-1">ให้ลูก</p>
-                                <p class="font-medium">{children.length} ตัว</p>
-                            </div>
+                            <div class="flex-1"><p class="text-xs text-gray-500 mb-1">สถานะ</p><p class="font-medium">{c.type}</p></div>
+                            <div class="flex-1"><p class="text-xs text-gray-500 mb-1">ให้ลูก</p><p class="font-medium">{children.length} ตัว</p></div>
                         </div>
-
-                        {/* Lineage */}
                         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                             <h3 class="font-medium text-brand-green mb-3"><i class="fa-solid fa-sitemap mr-2"></i>สายเลือด</h3>
                             <div class="grid grid-cols-2 gap-3">
-                                <div onClick={() => father && navigateTo('detail', father.id)} class={`p-3 rounded-lg border ${father ? 'bg-blue-50 border-blue-100 cursor-pointer' : 'bg-gray-50 border-gray-100'}`}>
-                                    <p class="text-xs text-blue-600 font-medium mb-1">พ่อพันธุ์</p>
-                                    <p class="font-semibold text-brand-brown">{father ? father.name : 'ไม่ระบุ'}</p>
-                                </div>
-                                <div onClick={() => mother && navigateTo('detail', mother.id)} class={`p-3 rounded-lg border ${mother ? 'bg-pink-50 border-pink-100 cursor-pointer' : 'bg-gray-50 border-gray-100'}`}>
-                                    <p class="text-xs text-pink-600 font-medium mb-1">แม่พันธุ์</p>
-                                    <p class="font-semibold text-brand-brown">{mother ? mother.name : 'ไม่ระบุ'}</p>
-                                </div>
+                                <div onClick={() => father && navigateTo('detail', father.id)} class={`p-3 rounded-lg border ${father ? 'bg-blue-50 border-blue-100 cursor-pointer' : 'bg-gray-50 border-gray-100'}`}><p class="text-xs text-blue-600 font-medium mb-1">พ่อพันธุ์</p><p class="font-semibold text-brand-brown truncate">{father ? father.name : 'ไม่ระบุ'}</p></div>
+                                <div onClick={() => mother && navigateTo('detail', mother.id)} class={`p-3 rounded-lg border ${mother ? 'bg-pink-50 border-pink-100 cursor-pointer' : 'bg-gray-50 border-gray-100'}`}><p class="text-xs text-pink-600 font-medium mb-1">แม่พันธุ์</p><p class="font-semibold text-brand-brown truncate">{mother ? mother.name : 'ไม่ระบุ'}</p></div>
                             </div>
                         </div>
-
-                        {/* Notes */}
-                        {c.notes && (
-                            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                <h3 class="font-medium text-brand-green mb-2"><i class="fa-solid fa-book mr-2"></i>หมายเหตุ</h3>
-                                <p class="text-gray-600 text-sm whitespace-pre-line">{c.notes}</p>
-                            </div>
-                        )}
-
-                        {/* Children List */}
-                        {children.length > 0 && (
-                            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                <h3 class="font-medium text-brand-green mb-3"><i class="fa-solid fa-egg mr-2"></i>รายชื่อลูกไก่ ({children.length})</h3>
-                                <div class="space-y-2">
-                                    {children.map(child => (
-                                        <div key={child.id} onClick={() => navigateTo('detail', child.id)} class="flex justify-between items-center p-2 hover:bg-gray-50 rounded-lg cursor-pointer border-b last:border-0">
-                                            <div>
-                                                <p class="font-medium text-brand-brown">{child.name || 'ไม่มีชื่อ'} <span class="text-xs text-gray-400 ml-1">#{child.ringNumber}</span></p>
-                                            </div>
-                                            <i class="fa-solid fa-chevron-right text-gray-300 text-sm"></i>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        {c.notes && (<div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100"><h3 class="font-medium text-brand-green mb-2"><i class="fa-solid fa-book mr-2"></i>หมายเหตุ</h3><p class="text-gray-600 text-sm whitespace-pre-line">{c.notes}</p></div>)}
                     </div>
                 </div>
             )
         };
-
-        // --- Render View Logic ---
-        let CurrentViewComponent;
-        if (view.name === 'home') CurrentViewComponent = <Dashboard />;
-        else if (view.name === 'add') CurrentViewComponent = <AddForm initialValues={view.params} />;
+        
+        let CurrentViewComponent = <Dashboard />;
+        if (view.name === 'add') CurrentViewComponent = <AddForm initialValues={view.params} />;
         else if (view.name === 'detail') CurrentViewComponent = <ChickenDetail id={view.params} />;
+        else if (view.name === 'parents') CurrentViewComponent = <ParentsView />;
 
         return (
             <React.Fragment>
-                {/* Main Content Area */}
                 {CurrentViewComponent}
-
-                {/* Floating Action Button (+) */}
                 {view.name === 'home' && (
-                    <button onClick={() => navigateTo('add')} class="absolute bottom-20 right-6 w-14 h-14 bg-brand-accent text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:scale-105 active:scale-95 transition-transform z-30">
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
+                    <button onClick={() => navigateTo('add')} class="absolute bottom-20 right-6 w-14 h-14 bg-brand-accent text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:scale-105 active:scale-95 transition-transform z-30"><i class="fa-solid fa-plus"></i></button>
                 )}
-
-                {/* Bottom Navigation */}
                 <div class="absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center pb-safe z-30 h-16 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                    {[
-                        { id: 'home', icon: 'fa-home', label: 'หน้าหลัก' },
-                        { id: 'parents', icon: 'fa-venus-mars', label: 'พ่อแม่พันธุ์' },
-                        { id: 'bands', icon: 'fa-tags', label: 'กิ๊ฟปีก' },
-                        { id: 'settings', icon: 'fa-cog', label: 'ตั้งค่า' }
-                    ].map(tab => (
-                        <button key={tab.id} onClick={() => { setCurrentTab(tab.id); if(tab.id==='home') navigateTo('home'); }} class={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentTab === tab.id ? 'text-brand-green' : 'text-gray-400'}`}>
-                            <i class={`fa-solid ${tab.icon} text-xl`}></i>
-                            <span class="text-[10px] font-medium">{tab.label}</span>
-                        </button>
+                    {[{ id: 'home', icon: 'fa-home', label: 'หน้าหลัก' }, { id: 'parents', icon: 'fa-venus-mars', label: 'พ่อแม่พันธุ์' }, { id: 'bands', icon: 'fa-tags', label: 'กิ๊ฟปีก' }, { id: 'settings', icon: 'fa-cog', label: 'ตั้งค่า' }].map(tab => (
+                        <button key={tab.id} onClick={() => navigateTo(tab.id)} class={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentTab === tab.id ? 'text-brand-green' : 'text-gray-400'}`}><i class={`fa-solid ${tab.icon} text-xl`}></i><span class="text-[10px] font-medium">{tab.label}</span></button>
                     ))}
                 </div>
             </React.Fragment>

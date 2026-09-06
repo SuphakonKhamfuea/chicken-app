@@ -27,12 +27,12 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } 
     </style>
 
-    <!-- React 18 & Babel -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- React 17 & Babel (เวอร์ชัน CDN เสถียรสูงสุดสำหรับไฟล์เดี่ยว) -->
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
-    <!-- Supabase JS Client -->
+    <!-- Supabase JS Client v2 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
@@ -86,9 +86,13 @@
         const [isSaving, setIsSaving] = useState(false);
 
         const fetchChickens = async () => {
-            const { data, error } = await supabase.from('chickens').select('*').order('created_at', { ascending: false });
-            if (error) console.error("Error fetching chickens:", error);
-            else setChickens(data || []);
+            try {
+                const { data, error } = await supabase.from('chickens').select('*').order('created_at', { ascending: false });
+                if (error) console.error("Error fetching chickens:", error);
+                else setChickens(data || []);
+            } catch (e) {
+                console.error("Fetch Exception:", e);
+            }
         };
 
         useEffect(() => {
@@ -376,9 +380,7 @@
         );
     }
 
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
-    root.render(<App />);
+    ReactDOM.render(<App />, document.getElementById('root'));
 </script>
 </body>
 </html>

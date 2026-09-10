@@ -14,7 +14,7 @@
                 extend: {
                     fontFamily: { sans: ['Prompt', 'sans-serif'] },
                     colors: {
-                        brand: { green: '#1F4E3D', cream: '#F9F6F0', brown: '#5C4033', accent: '#D4A373' }
+                        brand: { green: '#1F4E3D', cream: '#F9F6F0', brown: '#5C4033', accent: '#D4A373', lightGreen: '#2E7D32' }
                     }
                 }
             }
@@ -22,145 +22,716 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style> 
-        body { background-color: #e5e5e5; } 
+        body { background-color: #121212; font-family: 'Prompt', sans-serif; } 
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } 
     </style>
-
-    <!-- Supabase JS Client v2 CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="flex justify-center">
+<body class="flex justify-center items-center min-h-screen">
 
 <div id="app" class="w-full max-w-md h-screen bg-brand-cream relative overflow-hidden shadow-2xl flex flex-col">
-    <!-- Header -->
-    <div class="bg-brand-green text-white p-4 pt-6 rounded-b-2xl shadow-md z-10 flex items-center justify-between">
-        <h1 class="text-xl font-semibold tracking-wide flex-1 text-center">Chicken Breeding Record</h1>
-    </div>
-
     <!-- Content Area -->
-    <div id="content" class="flex-1 overflow-y-auto no-scrollbar pb-24 p-4">
-        <div class="text-center text-gray-500 mt-10">กำลังโหลดข้อมูล...</div>
+    <div id="main-content" class="flex-1 overflow-y-auto no-scrollbar pb-24">
+        <div class="text-center text-gray-500 mt-20"><i class="fa-solid fa-spinner fa-spin text-3xl mb-2 text-brand-green"></i><p>กำลังโหลดข้อมูล...</p></div>
     </div>
 
     <!-- Floating Add Button -->
-    <button onclick="showAddForm()" class="absolute bottom-20 right-6 w-14 h-14 bg-brand-accent text-white rounded-full shadow-lg flex items-center justify-center text-2xl active:scale-95 transition-transform z-30">
+    <button id="floating-add-btn" onclick="openAddEditModal()" class="absolute bottom-20 right-6 w-14 h-14 bg-brand-accent text-white rounded-full shadow-xl flex items-center justify-center text-2xl active:scale-95 transition-transform z-30">
         <i class="fa-solid fa-plus"></i>
     </button>
+
+    <!-- Bottom Navigation Bar -->
+    <div class="absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center z-30 h-16 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-full h-full space-y-1 text-brand-green">
+            <i class="fa-solid fa-house text-lg"></i><span class="text-[11px] font-medium">หน้าหลัก</span>
+        </button>
+        <button onclick="switchTab('parents')" id="nav-parents" class="flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-400">
+            <i class="fa-solid fa-venus-mars text-lg"></i><span class="text-[11px] font-medium">พ่อแม่พันธุ์</span>
+        </button>
+        <button onclick="switchTab('bands')" id="nav-bands" class="flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-400">
+            <i class="fa-solid fa-tags text-lg"></i><span class="text-[11px] font-medium">กิ๊ฟปีก</span>
+        </button>
+        <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-400">
+            <i class="fa-solid fa-gear text-lg"></i><span class="text-[11px] font-medium">ตั้งค่า</span>
+        </button>
+    </div>
+</div>
+
+<!-- Full Image Viewer Modal -->
+<div id="image-viewer-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex-col justify-center items-center p-4">
+    <button onclick="closeImageViewer()" class="absolute top-6 right-6 text-white text-3xl"><i class="fa-solid fa-xmark"></i></button>
+    <img id="full-image-target" src="" class="max-w-full max-h-[80vh] object-contain rounded-lg">
 </div>
 
 <script>
-    const SUPABASE_URL = "https://ptquiexaqmgbglhozzfw.supabase.co";
+    const SUPABASE_REST_URL = "https://ptquiexaqmgbglhozzfw.supabase.co/rest/v1/chickens";
+    const SUPABASE_STORAGE_URL = "https://ptquiexaqmgbglhozzfw.supabase.co/storage/v1/object/CHICKEN RECORD";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cXVpZXhhcW1nYmdsaG96emZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2NzMyNjUsImV4cCI6MjEwNDI0OTI2NX0.fO7VdqGmwYSL-UB8JYKCrJ4xmPzfaPNyvkMYvbFRsro";
-    
-    let supabaseClient = null;
 
-    // ฟังก์ชันช่วยดึง client เพื่อป้องกันปัญหา CDN โหลดไม่ทัน
-    function getSupabase() {
-        if (!supabaseClient) {
-            const supabaseLib = window.supabase || window.supabaseClient;
-            if (supabaseLib && supabaseLib.createClient) {
-                supabaseClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            } else {
-                throw new Error("Supabase SDK ยังโหลดไม่เสร็จ กรุณารีเฟรชหน้าเว็บอีกครั้ง");
-            }
-        }
-        return supabaseClient;
-    }
+    const HEADERS = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    };
 
     let chickens = [];
+    let currentTab = 'home';
+    let searchQuery = '';
+    let filterType = 'all';
+    let tempImages = [];
 
+    // ดึงข้อมูลไก่ทั้งหมด
     async function loadChickens() {
-        const content = document.getElementById('content');
         try {
-            const client = getSupabase();
-            const { data, error } = await client.from('chickens').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
-            chickens = data || [];
-            renderHome();
+            const res = await fetch(`${SUPABASE_REST_URL}?select=*&order=created_at.desc`, { headers: HEADERS });
+            if (!res.ok) throw new Error("ไม่สามารถดึงข้อมูลได้");
+            chickens = await res.json();
+            renderTab();
         } catch (err) {
-            content.innerHTML = `<div class="text-center text-red-500 mt-10">เกิดข้อผิดพลาด: ${err.message}</div>`;
+            document.getElementById('main-content').innerHTML = `
+                <div class="p-6 text-center text-red-500 mt-10">
+                    <i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i>
+                    <p class="font-bold">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+                    <p class="text-xs text-gray-500 mt-1">${err.message}</p>
+                    <button onclick="loadChickens()" class="mt-4 bg-brand-green text-white px-4 py-2 rounded-xl text-sm font-medium">ลองใหม่อีกครั้ง</button>
+                </div>`;
         }
     }
 
-    function renderHome() {
-        const content = document.getElementById('content');
-        if (chickens.length === 0) {
-            content.innerHTML = `<div class="text-center text-gray-400 mt-10">ยังไม่มีข้อมูลไก่ กดปุ่ม + ด้านล่างเพื่อเพิ่มข้อมูลแรกเลย!</div>`;
-            return;
-        }
-
-        let html = '<div class="space-y-3">';
-        chickens.forEach(c => {
-            html += `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-                    <div>
-                        <h3 class="font-bold text-brand-brown text-lg">${c.name || 'ไม่มีชื่อ'}</h3>
-                        <p class="text-sm text-gray-500">${c.type || 'ลูกไก่'} • ${c.breed || 'ไม่ระบุสายพันธุ์'}</p>
-                    </div>
-                    <span class="text-sm font-semibold bg-brand-cream text-brand-brown px-3 py-1 rounded-lg border border-gray-200">#${c.ringNumber}</span>
-                </div>
-            `;
+    // สลับแท็บหน้า
+    function switchTab(tab) {
+        currentTab = tab;
+        ['home', 'parents', 'bands', 'settings'].forEach(t => {
+            const btn = document.getElementById(`nav-${t}`);
+            if (t === tab) {
+                btn.className = "flex flex-col items-center justify-center w-full h-full space-y-1 text-brand-green";
+            } else {
+                btn.className = "flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-400";
+            }
         });
-        html += '</div>';
-        content.innerHTML = html;
+        
+        const floatBtn = document.getElementById('floating-add-btn');
+        if (tab === 'settings') floatBtn.classList.add('hidden');
+        else floatBtn.classList.remove('hidden');
+
+        renderTab();
     }
 
-    function showAddForm() {
-        const content = document.getElementById('content');
-        content.innerHTML = `
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4">
-                <h2 class="font-bold text-brand-brown text-lg border-b pb-2">เพิ่มข้อมูลไก่ใหม่</h2>
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-brand-brown">หมายเลขกิ๊ฟปีก *</label>
-                    <input type="text" id="ringNumber" class="w-full border border-gray-300 rounded-lg p-3 outline-none" placeholder="เช่น 001">
+    function renderTab() {
+        if (currentTab === 'home') renderHome();
+        else if (currentTab === 'parents') renderParents();
+        else if (currentTab === 'bands') renderBands();
+        else if (currentTab === 'settings') renderSettings();
+    }
+
+    // 1. หน้าหลัก (Dashboard)
+    function renderHome() {
+        const total = chickens.length;
+        const fathers = chickens.filter(c => c.type === 'พ่อพันธุ์').length;
+        const mothers = chickens.filter(c => c.type === 'แม่พันธุ์').length;
+        const chicks = chickens.filter(c => c.type === 'ลูกไก่').length;
+
+        const filtered = chickens.filter(c => {
+            const matchSearch = (c.name && c.name.includes(searchQuery)) || 
+                                (c.ringNumber && c.ringNumber.includes(searchQuery)) ||
+                                (c.breed && c.breed.includes(searchQuery));
+            const matchFilter = filterType === 'all' || c.type === filterType;
+            return matchSearch && matchFilter;
+        });
+
+        let html = `
+            <div class="bg-brand-green text-white p-5 pt-8 rounded-b-3xl shadow-md">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h1 class="text-xl font-bold tracking-wide">Chicken Record</h1>
+                        <p class="text-xs text-brand-cream/80">ระบบบันทึกและจัดการสายเลือดไก่</p>
+                    </div>
+                    <div class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center border border-white/20">
+                        <i class="fa-solid fa-drumstick-bite text-brand-accent text-lg"></i>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-brand-brown">ชื่อไก่</label>
-                    <input type="text" id="name" class="w-full border border-gray-300 rounded-lg p-3 outline-none" placeholder="เช่น เจ้าพายุ">
+                <!-- Search Box -->
+                <div class="bg-white rounded-2xl shadow-inner flex items-center p-3 px-4 text-gray-700">
+                    <i class="fa-solid fa-magnifying-glass text-gray-400 mr-3"></i>
+                    <input type="text" placeholder="ค้นหาชื่อ, กิ๊ฟปีก, สายเลือด..." class="w-full outline-none text-sm text-brand-brown bg-transparent"
+                           value="${searchQuery}" oninput="searchQuery = this.value; renderHome();">
+                    ${searchQuery ? `<button onclick="searchQuery=''; renderHome();" class="text-gray-400"><i class="fa-solid fa-circle-xmark"></i></button>` : ''}
                 </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-brand-brown">สถานะ</label>
-                    <select id="type" class="w-full border border-gray-300 rounded-lg p-3 outline-none bg-white">
-                        <option value="ลูกไก่">ลูกไก่</option>
-                        <option value="พ่อพันธุ์">พ่อพันธุ์</option>
-                        <option value="แม่พันธุ์">แม่พันธุ์</option>
-                    </select>
+            </div>
+
+            <div class="p-4 space-y-5">
+                <!-- Dashboard Grid -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div onclick="filterType='all'; renderHome();" class="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-3 cursor-pointer ${filterType==='all'?'ring-2 ring-brand-green':''}">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-tags"></i></div>
+                        <div><p class="text-[11px] text-gray-400 font-medium">กิ๊ฟปีกทั้งหมด</p><p class="text-lg font-bold text-brand-brown">${total} <span class="text-xs font-normal">ตัว</span></p></div>
+                    </div>
+                    <div onclick="filterType='พ่อพันธุ์'; renderHome();" class="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-3 cursor-pointer ${filterType==='พ่อพันธุ์'?'ring-2 ring-brand-green':''}">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-mars"></i></div>
+                        <div><p class="text-[11px] text-gray-400 font-medium">พ่อพันธุ์</p><p class="text-lg font-bold text-brand-brown">${fathers} <span class="text-xs font-normal">ตัว</span></p></div>
+                    </div>
+                    <div onclick="filterType='แม่พันธุ์'; renderHome();" class="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-3 cursor-pointer ${filterType==='แม่พันธุ์'?'ring-2 ring-brand-green':''}">
+                        <div class="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-venus"></i></div>
+                        <div><p class="text-[11px] text-gray-400 font-medium">แม่พันธุ์</p><p class="text-lg font-bold text-brand-brown">${mothers} <span class="text-xs font-normal">ตัว</span></p></div>
+                    </div>
+                    <div onclick="filterType='ลูกไก่'; renderHome();" class="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-3 cursor-pointer ${filterType==='ลูกไก่'?'ring-2 ring-brand-green':''}">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-egg"></i></div>
+                        <div><p class="text-[11px] text-gray-400 font-medium">ลูกไก่</p><p class="text-lg font-bold text-brand-brown">${chicks} <span class="text-xs font-normal">ตัว</span></p></div>
+                    </div>
                 </div>
-                <div class="flex gap-2 pt-2">
-                    <button onclick="loadChickens()" class="flex-1 border border-gray-300 p-3 rounded-xl font-medium">ยกเลิก</button>
-                    <button onclick="saveChicken()" id="saveBtn" class="flex-1 bg-brand-green text-white p-3 rounded-xl font-semibold shadow-md">บันทึกข้อมูล</button>
+
+                <!-- Recent List -->
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="font-bold text-brand-brown text-sm">รายการไก่ ${filterType!=='all'?`(${filterType})`:''}</h2>
+                        ${filterType!=='all'?`<button onclick="filterType='all'; renderHome();" class="text-xs text-brand-accent font-medium">ล้างตัวกรอง</button>`:''}
+                    </div>
+                    ${filtered.length === 0 ? `
+                        <div class="bg-white rounded-2xl p-8 text-center text-gray-400 border border-gray-100 shadow-sm">
+                            <i class="fa-solid fa-box-open text-4xl mb-2 opacity-40"></i>
+                            <p class="text-sm">ไม่พบข้อมูลไก่</p>
+                            <p class="text-xs text-gray-400 mt-1">กดปุ่ม + ด้านล่างเพื่อเพิ่มข้อมูลไก่ใหม่</p>
+                        </div>
+                    ` : `
+                        <div class="space-y-3">
+                            ${filtered.map(c => renderChickenCard(c)).join('')}
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+    }
+
+    // Rendering Single Chicken Card
+    function renderChickenCard(c) {
+        const thumb = (c.images && c.images.length > 0) ? c.images[0] : null;
+        let badgeColor = "bg-amber-100 text-amber-800";
+        if(c.type === 'พ่อพันธุ์') badgeColor = "bg-emerald-100 text-emerald-800";
+        else if(c.type === 'แม่พันธุ์') badgeColor = "bg-pink-100 text-pink-800";
+
+        return `
+            <div onclick="showDetail('${c.id}')" class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-3 active:scale-[0.99] transition cursor-pointer">
+                <div class="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden shrink-0 border border-gray-200 flex items-center justify-center">
+                    ${thumb ? `<img src="${thumb}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-camera text-gray-300 text-xl"></i>`}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start">
+                        <h3 class="font-bold text-brand-brown text-base truncate">${c.name || 'ไม่มีชื่อ'}</h3>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-md border border-gray-200 bg-brand-cream text-brand-brown shrink-0">#${c.ringNumber}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 truncate mt-0.5">${c.breed || 'ไม่ระบุสายพันธุ์'}</p>
+                    <div class="flex items-center space-x-2 mt-1">
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${badgeColor}">${c.type || 'ลูกไก่'}</span>
+                        ${c.birthDate ? `<span class="text-[10px] text-gray-400"><i class="fa-regular fa-calendar mr-1"></i>${c.birthDate}</span>` : ''}
+                    </div>
                 </div>
             </div>
         `;
     }
 
-    async function saveChicken() {
-        const ringNumber = document.getElementById('ringNumber').value.trim();
-        const name = document.getElementById('name').value.trim();
-        const type = document.getElementById('type').value;
-        const saveBtn = document.getElementById('saveBtn');
+    // 2. หน้าพ่อพันธุ์และแม่พันธุ์ (แยกกลุ่มชัดเจน)
+    function renderParents() {
+        const fathers = chickens.filter(c => c.type === 'พ่อพันธุ์');
+        const mothers = chickens.filter(c => c.type === 'แม่พันธุ์');
+
+        let html = `
+            <div class="bg-brand-green text-white p-5 pt-8 rounded-b-3xl shadow-md">
+                <h1 class="text-xl font-bold text-center">พ่อพันธุ์ & แม่พันธุ์</h1>
+                <p class="text-xs text-center text-brand-cream/80 mt-1">แยกกลุ่มชัดเจน พร้อมประวัติการให้ลูก</p>
+            </div>
+
+            <div class="p-4 space-y-6">
+                <!-- พ่อพันธุ์ Section -->
+                <div>
+                    <div class="flex items-center space-x-2 mb-3 border-b border-gray-200 pb-2">
+                        <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-mars"></i></div>
+                        <h2 class="font-bold text-brand-brown text-base">พ่อพันธุ์ (${fathers.length})</h2>
+                    </div>
+                    ${fathers.length === 0 ? `<p class="text-xs text-gray-400 italic p-2">ยังไม่มีข้อมูลพ่อพันธุ์</p>` : `
+                        <div class="grid grid-cols-2 gap-3">
+                            ${fathers.map(f => renderParentCard(f)).join('')}
+                        </div>
+                    `}
+                </div>
+
+                <!-- แม่พันธุ์ Section -->
+                <div>
+                    <div class="flex items-center space-x-2 mb-3 border-b border-gray-200 pb-2">
+                        <div class="w-7 h-7 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-venus"></i></div>
+                        <h2 class="font-bold text-brand-brown text-base">แม่พันธุ์ (${mothers.length})</h2>
+                    </div>
+                    ${mothers.length === 0 ? `<p class="text-xs text-gray-400 italic p-2">ยังไม่มีข้อมูลแม่พันธุ์</p>` : `
+                        <div class="grid grid-cols-2 gap-3">
+                            ${mothers.map(m => renderParentCard(m)).join('')}
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+    }
+
+    // Parent Card Component
+    function renderParentCard(p) {
+        const children = chickens.filter(c => c.fatherId === p.id || c.motherId === p.id);
+        const thumb = (p.images && p.images.length > 0) ? p.images[0] : null;
+
+        return `
+            <div onclick="showDetail('${p.id}')" class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center active:scale-95 transition cursor-pointer">
+                <div class="w-20 h-20 rounded-full bg-gray-100 overflow-hidden border-2 ${p.type==='พ่อพันธุ์'?'border-emerald-500':'border-pink-500'} shadow-sm mb-2 relative">
+                    ${thumb ? `<img src="${thumb}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300"><i class="fa-solid fa-drumstick-bite text-2xl"></i></div>`}
+                </div>
+                <h3 class="font-bold text-brand-brown text-sm truncate w-full">${p.name || 'ไม่มีชื่อ'}</h3>
+                <span class="text-[10px] font-semibold bg-brand-cream text-brand-brown px-2 py-0.5 rounded-md border border-gray-200 mt-1">#${p.ringNumber}</span>
+                <p class="text-[11px] text-gray-500 truncate w-full mt-1">${p.breed || 'ไม่ระบุสายพันธุ์'}</p>
+                <div class="mt-2 bg-gray-50 rounded-lg px-2 py-1 w-full text-[10px] text-gray-600 font-medium">
+                    <i class="fa-solid fa-egg text-brand-accent mr-1"></i>ลูกทั้งหมด ${children.length} ตัว
+                </div>
+            </div>
+        `;
+    }
+
+    // 3. หน้ากิ๊ฟปีกไก่ (รายการกิ๊ฟปีก)
+    function renderBands() {
+        let html = `
+            <div class="bg-brand-green text-white p-5 pt-8 rounded-b-3xl shadow-md">
+                <h1 class="text-xl font-bold text-center">รหัสกิ๊ฟปีกไก่ทั้งหมด</h1>
+                <p class="text-xs text-center text-brand-cream/80 mt-1">เรียงตามกิ๊ฟปีกเพื่อความสะดวกในการตรวจเช็ค</p>
+            </div>
+            <div class="p-4 space-y-3">
+                ${chickens.length === 0 ? `<div class="text-center text-gray-400 mt-10">ยังไม่มีข้อมูลไก่</div>` : `
+                    ${[...chickens].sort((a,b) => (a.ringNumber || '').localeCompare(b.ringNumber || '')).map(c => renderChickenCard(c)).join('')}
+                `}
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+    }
+
+    // 4. หน้าตั้งค่าและ Backup ข้อมูล
+    function renderSettings() {
+        let html = `
+            <div class="bg-brand-green text-white p-5 pt-8 rounded-b-3xl shadow-md text-center">
+                <h1 class="text-xl font-bold">ตั้งค่า & สำรองข้อมูล</h1>
+                <p class="text-xs text-brand-cream/80 mt-1">Chicken Breeding Record v2.0</p>
+            </div>
+            <div class="p-4 space-y-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                    <h3 class="font-bold text-brand-brown text-sm border-b pb-2"><i class="fa-solid fa-database text-brand-green mr-2"></i>การจัดการข้อมูล</h3>
+                    <button onclick="exportCSV()" class="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 p-3 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 active:scale-95 transition">
+                        <i class="fa-solid fa-file-csv text-base"></i><span>ส่งออกข้อมูลเป็น CSV (Backup)</span>
+                    </button>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-2 text-xs text-gray-500">
+                    <p class="font-bold text-brand-brown">เกี่ยวกับแอปพลิเคชัน</p>
+                    <p>ออกแบบสำหรับซุ้มไก่ชนและเกษตรกรเพาะพันธุ์ไก่ บันทึกข้อมูลกิ๊ฟปีก สายเลือด พ่อพันธุ์ แม่พันธุ์ และรูปภาพ ย่อยข้อมูลให้อ่านง่าย เสถียร รวดเร็ว</p>
+                </div>
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+    }
+
+    // 5. หน้ารายละเอียดไก่ (Chicken Profile)
+    function showDetail(id) {
+        const c = chickens.find(x => x.id === id);
+        if (!c) return;
+
+        const father = chickens.find(x => x.id === c.fatherId);
+        const mother = chickens.find(x => x.id === c.motherId);
+        const children = chickens.filter(x => x.fatherId === c.id || x.motherId === c.id);
+
+        let html = `
+            <div class="bg-brand-cream min-h-screen pb-24">
+                <!-- Top Image Banner -->
+                <div class="relative h-72 bg-gray-900">
+                    ${(c.images && c.images.length > 0) ? `
+                        <img src="${c.images[0]}" onclick="openImageViewer('${c.images[0]}')" class="w-full h-full object-cover cursor-pointer">
+                    ` : `
+                        <div class="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                            <i class="fa-solid fa-camera text-4xl mb-2"></i>
+                            <span class="text-xs">ไม่มีรูปภาพ</span>
+                        </div>
+                    `}
+                    <button onclick="renderTab()" class="absolute top-6 left-4 w-10 h-10 bg-black/40 text-white rounded-full backdrop-blur-md flex items-center justify-center shadow-lg"><i class="fa-solid fa-chevron-left"></i></button>
+                    <div class="absolute top-6 right-4 flex space-x-2">
+                        <button onclick="openAddEditModal('${c.id}')" class="w-10 h-10 bg-black/40 text-white rounded-full backdrop-blur-md flex items-center justify-center shadow-lg"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deleteChicken('${c.id}')" class="w-10 h-10 bg-red-600/80 text-white rounded-full backdrop-blur-md flex items-center justify-center shadow-lg"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <div class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-brand-accent text-white mb-1 inline-block">กิ๊ฟปีก: #${c.ringNumber}</span>
+                        <h1 class="text-2xl font-bold truncate">${c.name || 'ไม่มีชื่อ'}</h1>
+                        <p class="text-xs text-gray-300">${c.type || 'ลูกไก่'} • ${c.breed || 'ไม่ระบุสายพันธุ์'}</p>
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-4">
+                    <!-- Photo Gallery (ถ้ามีหลายรูป) -->
+                    ${(c.images && c.images.length > 1) ? `
+                        <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+                            <h3 class="text-xs font-bold text-brand-brown mb-2"><i class="fa-solid fa-images text-brand-green mr-1"></i>รูปภาพทั้งหมด (${c.images.length})</h3>
+                            <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
+                                ${c.images.map(img => `
+                                    <img src="${img}" onclick="openImageViewer('${img}')" class="w-16 h-16 rounded-xl object-cover shrink-0 border border-gray-200 cursor-pointer">
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- General Info Card -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                        <h3 class="font-bold text-brand-brown text-xs border-b pb-2"><i class="fa-solid fa-circle-info text-brand-green mr-2"></i>ข้อมูลทั่วไป</h3>
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div><span class="text-gray-400 block">สถานะ:</span><span class="font-semibold text-brand-brown">${c.type || '-'}</span></div>
+                            <div><span class="text-gray-400 block">สายเลือด/สายพันธุ์:</span><span class="font-semibold text-brand-brown">${c.breed || '-'}</span></div>
+                            <div><span class="text-gray-400 block">วันเกิด/วันที่บันทึก:</span><span class="font-semibold text-brand-brown">${c.birthDate || '-'}</span></div>
+                            <div><span class="text-gray-400 block">จำนวนลูกที่บันทึก:</span><span class="font-semibold text-brand-accent">${children.length} ตัว</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Pedigree Link (พ่อพันธุ์ & แม่พันธุ์) -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                        <h3 class="font-bold text-brand-brown text-xs border-b pb-2"><i class="fa-solid fa-sitemap text-brand-green mr-2"></i>สายเลือดแม่บท</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div ${father ? `onclick="showDetail('${father.id}')"` : ''} class="p-3 rounded-xl border ${father?'bg-emerald-50 border-emerald-100 cursor-pointer':'bg-gray-50 border-gray-100'} text-xs">
+                                <p class="text-[10px] text-emerald-600 font-bold mb-1"><i class="fa-solid fa-mars mr-1"></i>พ่อพันธุ์</p>
+                                <p class="font-bold text-brand-brown truncate">${father ? father.name : 'ไม่ระบุ'}</p>
+                                ${father ? `<span class="text-[9px] text-gray-500">#${father.ringNumber}</span>` : ''}
+                            </div>
+                            <div ${mother ? `onclick="showDetail('${mother.id}')"` : ''} class="p-3 rounded-xl border ${mother?'bg-pink-50 border-pink-100 cursor-pointer':'bg-gray-50 border-gray-100'} text-xs">
+                                <p class="text-[10px] text-pink-600 font-bold mb-1"><i class="fa-solid fa-venus mr-1"></i>แม่พันธุ์</p>
+                                <p class="font-bold text-brand-brown truncate">${mother ? mother.name : 'ไม่ระบุ'}</p>
+                                ${mother ? `<span class="text-[9px] text-gray-500">#${mother.ringNumber}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Children List -->
+                    ${children.length > 0 ? `
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                            <h3 class="font-bold text-brand-brown text-xs border-b pb-2"><i class="fa-solid fa-egg text-brand-accent mr-2"></i>รายการลูกไก่ (${children.length})</h3>
+                            <div class="space-y-2">
+                                ${children.map(child => `
+                                    <div onclick="showDetail('${child.id}')" class="flex justify-between items-center p-2 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer text-xs">
+                                        <div>
+                                            <span class="font-bold text-brand-brown">${child.name || 'ไม่มีชื่อ'}</span>
+                                            <span class="text-[10px] text-gray-400 block">${child.breed || '-'}</span>
+                                        </div>
+                                        <span class="font-semibold text-brand-brown bg-white px-2 py-0.5 rounded border">#${child.ringNumber}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Notes Card -->
+                    ${c.notes ? `
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-2">
+                            <h3 class="font-bold text-brand-brown text-xs border-b pb-2"><i class="fa-solid fa-note-sticky text-brand-green mr-2"></i>หมายเหตุ / ลักษณะเด่น</h3>
+                            <p class="text-xs text-gray-600 whitespace-pre-line leading-relaxed">${c.notes}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+        window.scrollTo(0,0);
+    }
+
+    // 6. ฟอร์มเพิ่ม/แก้ไขข้อมูลไก่
+    function openAddEditModal(id = null) {
+        const c = id ? chickens.find(x => x.id === id) : {};
+        tempImages = c.images ? [...c.images] : [];
+
+        const fathers = chickens.filter(x => x.type === 'พ่อพันธุ์' && x.id !== id);
+        const mothers = chickens.filter(x => x.type === 'แม่พันธุ์' && x.id !== id);
+
+        let html = `
+            <div class="bg-brand-cream min-h-screen p-4 pb-24">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-bold text-brand-brown text-lg">${id ? 'แก้ไขข้อมูลไก่' : 'เพิ่มข้อมูลไก่ใหม่'}</h2>
+                    <button onclick="renderTab()" class="text-gray-400 text-xl"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <div class="space-y-4 text-xs text-brand-brown">
+                    <!-- Image Upload Component -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center">
+                        <label class="block font-bold mb-2 text-left">รูปภาพไก่ (แนบได้หลายรูป)</label>
+                        <div id="image-preview-container" class="flex space-x-2 overflow-x-auto no-scrollbar pb-2 mb-2">
+                            ${renderFormImagePreviews()}
+                        </div>
+                        <input type="file" id="photoInput" accept="image/*" multiple class="hidden" onchange="handleImageSelection(event)">
+                        <button type="button" onclick="document.getElementById('photoInput').click()" class="w-full bg-brand-cream border border-dashed border-brand-green text-brand-green p-3 rounded-xl font-semibold flex items-center justify-center space-x-2 active:scale-95 transition">
+                            <i class="fa-solid fa-camera text-base"></i><span>+ ถ่ายรูป / เลือกรูปจากเครื่อง</span>
+                        </button>
+                    </div>
+
+                    <!-- Input Fields -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                        <div>
+                            <label class="block font-bold mb-1">หมายเลขกิ๊ฟปีก *</label>
+                            <input type="text" id="form-ringNumber" class="w-full border border-gray-300 rounded-xl p-3 outline-none focus:border-brand-green text-sm" value="${c.ringNumber || ''}" placeholder="เช่น 00125">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1">ชื่อไก่</label>
+                            <input type="text" id="form-name" class="w-full border border-gray-300 rounded-xl p-3 outline-none focus:border-brand-green text-sm" value="${c.name || ''}" placeholder="เช่น เจ้าพายุ">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-bold mb-1">สถานะ/ประเภท</label>
+                                <select id="form-type" class="w-full border border-gray-300 rounded-xl p-3 outline-none bg-white text-sm">
+                                    <option value="ลูกไก่" ${c.type==='ลูกไก่'?'selected':''}>ลูกไก่</option>
+                                    <option value="พ่อพันธุ์" ${c.type==='พ่อพันธุ์'?'selected':''}>พ่อพันธุ์</option>
+                                    <option value="แม่พันธุ์" ${c.type==='แม่พันธุ์'?'selected':''}>แม่พันธุ์</option>
+                                    <option value="อื่นๆ" ${c.type==='อื่นๆ'?'selected':''}>อื่นๆ</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block font-bold mb-1">สายเลือด/สายพันธุ์</label>
+                                <input type="text" id="form-breed" class="w-full border border-gray-300 rounded-xl p-3 outline-none focus:border-brand-green text-sm" value="${c.breed || ''}" placeholder="เช่น พม่า/เหลืองหางขาว">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1">วันเกิด / วันที่บันทึก</label>
+                            <input type="date" id="form-birthDate" class="w-full border border-gray-300 rounded-xl p-3 outline-none bg-white text-sm" value="${c.birthDate || ''}">
+                        </div>
+                    </div>
+
+                    <!-- Pedigree Parents Select -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                        <h3 class="font-bold text-brand-green border-b pb-1">เชื่อมโยงพ่อ-แม่พันธุ์</h3>
+                        <div>
+                            <label class="block font-bold mb-1">เลือกพ่อพันธุ์</label>
+                            <select id="form-fatherId" class="w-full border border-gray-300 rounded-xl p-3 outline-none bg-white text-sm">
+                                <option value="">-- ไม่ระบุ --</option>
+                                ${fathers.map(f => `<option value="${f.id}" ${c.fatherId===f.id?'selected':''}>${f.name || 'ไม่มีชื่อ'} (#${f.ringNumber})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1">เลือกแม่พันธุ์</label>
+                            <select id="form-motherId" class="w-full border border-gray-300 rounded-xl p-3 outline-none bg-white text-sm">
+                                <option value="">-- ไม่ระบุ --</option>
+                                ${mothers.map(m => `<option value="${m.id}" ${c.motherId===m.id?'selected':''}>${m.name || 'ไม่มีชื่อ'} (#${m.ringNumber})</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <label class="block font-bold mb-1">หมายเหตุ / ลักษณะเด่น / ผลงาน</label>
+                        <textarea id="form-notes" rows="3" class="w-full border border-gray-300 rounded-xl p-3 outline-none focus:border-brand-green text-sm" placeholder="พิมพ์ลักษณะเด่น ประวัติการผสม ผลงาน สุขภาพ...">${c.notes || ''}</textarea>
+                    </div>
+
+                    <!-- Submit Buttons -->
+                    <div class="flex space-x-2 pt-2">
+                        <button type="button" onclick="renderTab()" class="flex-1 border border-gray-300 p-3.5 rounded-xl font-bold text-gray-600 bg-white">ยกเลิก</button>
+                        <button type="button" onclick="submitSaveChicken('${id || ''}')" id="saveSubmitBtn" class="flex-1 bg-brand-green text-white p-3.5 rounded-xl font-bold shadow-lg active:scale-95 transition">บันทึกข้อมูล</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('main-content').innerHTML = html;
+        window.scrollTo(0,0);
+    }
+
+    // Render Preview Images in Form
+    function renderFormImagePreviews() {
+        if (tempImages.length === 0) return `<p class="text-xs text-gray-400 py-2 w-full">ยังไม่มีรูปภาพที่แนบ</p>`;
+        return tempImages.map((img, idx) => `
+            <div class="relative w-20 h-20 shrink-0">
+                <img src="${img}" class="w-full h-full object-cover rounded-xl border border-gray-200">
+                <button type="button" onclick="removeTempImage(${idx})" class="absolute -top-2 -right-2 bg-red-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-md"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        `).join('');
+    }
+
+    function removeTempImage(idx) {
+        tempImages.splice(idx, 1);
+        document.getElementById('image-preview-container').innerHTML = renderFormImagePreviews();
+    }
+
+    // Handle Image Compression & Storage Upload
+    async function handleImageSelection(event) {
+        const files = Array.from(event.target.files);
+        if (files.length === 0) return;
+
+        for (let file of files) {
+            try {
+                const compressedBase64 = await compressImage(file);
+                // พยายามอัปโหลดขึ้น Storage ถ้าไม่สำเร็จจะใช้ Base64 สื่อสารแทน
+                const uploadedUrl = await uploadToStorage(file, compressedBase64);
+                tempImages.push(uploadedUrl || compressedBase64);
+            } catch (err) {
+                console.error("Image Processing Error:", err);
+            }
+        }
+        document.getElementById('image-preview-container').innerHTML = renderFormImagePreviews();
+    }
+
+    // Canvas Image Compression Helper
+    function compressImage(file, maxWidth = 600, maxHeight = 600) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+                    } else {
+                        if (height > maxHeight) { width = Math.round((width * maxHeight) / height); height = maxHeight; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    let ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Direct Upload to Supabase Storage
+    async function uploadToStorage(file, base64Str) {
+        try {
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+            const blob = await (await fetch(base64Str)).blob();
+
+            const res = await fetch(`${SUPABASE_STORAGE_URL}/${fileName}`, {
+                method: "POST",
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                    "Content-Type": "image/jpeg"
+                },
+                body: blob
+            });
+
+            if (res.ok) {
+                return `${SUPABASE_STORAGE_URL}/${fileName}`;
+            }
+        } catch (e) {
+            console.warn("Storage upload failed, fallback to base64", e);
+        }
+        return null;
+    }
+
+    // Submit Save/Update Chicken
+    async function submitSaveChicken(id = '') {
+        const ringNumber = document.getElementById('form-ringNumber').value.trim();
+        const name = document.getElementById('form-name').value.trim();
+        const type = document.getElementById('form-type').value;
+        const breed = document.getElementById('form-breed').value.trim();
+        const birthDate = document.getElementById('form-birthDate').value;
+        const fatherId = document.getElementById('form-fatherId').value || null;
+        const motherId = document.getElementById('form-motherId').value || null;
+        const notes = document.getElementById('form-notes').value.trim();
 
         if (!ringNumber) {
             alert('กรุณากรอกหมายเลขกิ๊ฟปีก');
             return;
         }
 
-        saveBtn.disabled = true;
-        saveBtn.innerText = 'กำลังบันทึก...';
+        const btn = document.getElementById('saveSubmitBtn');
+        btn.disabled = true;
+        btn.innerText = 'กำลังบันทึก...';
+
+        const payload = {
+            ringNumber, name, type, breed, birthDate, fatherId, motherId, notes,
+            images: tempImages,
+            updatedAt: new Date().toISOString()
+        };
 
         try {
-            const client = getSupabase();
-            const { error } = await client.from('chickens').insert([{ ringNumber, name, type }]);
-            if (error) throw error;
+            let res;
+            if (id) {
+                // Update
+                res = await fetch(`${SUPABASE_REST_URL}?id=eq.${id}`, {
+                    method: "PATCH",
+                    headers: HEADERS,
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                // Insert
+                payload.createdAt = new Date().toISOString();
+                res = await fetch(SUPABASE_REST_URL, {
+                    method: "POST",
+                    headers: HEADERS,
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.message || "บันทึกข้อมูลไม่สำเร็จ");
+            }
+
             await loadChickens();
+            if (id) showDetail(id);
+            else switchTab('home');
+
         } catch (err) {
-            alert('บันทึกไม่สำเร็จ: ' + err.message);
-            saveBtn.disabled = false;
-            saveBtn.innerText = 'บันทึกข้อมูล';
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+            btn.disabled = false;
+            btn.innerText = 'บันทึกข้อมูล';
         }
     }
 
+    // Delete Chicken with Confirmation
+    async function deleteChicken(id) {
+        if (!confirm("คุณต้องการลบข้อมูลไก่ตัวนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้")) return;
+
+        try {
+            const res = await fetch(`${SUPABASE_REST_URL}?id=eq.${id}`, {
+                method: "DELETE",
+                headers: HEADERS
+            });
+            if (!res.ok) throw new Error("ลบข้อมูลไม่สำเร็จ");
+            await loadChickens();
+            switchTab('home');
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    // Fullscreen Image Viewer Modal
+    function openImageViewer(src) {
+        document.getElementById('full-image-target').src = src;
+        document.getElementById('image-viewer-modal').classList.remove('hidden');
+        document.getElementById('image-viewer-modal').classList.add('flex');
+    }
+
+    function closeImageViewer() {
+        document.getElementById('image-viewer-modal').classList.add('hidden');
+        document.getElementById('image-viewer-modal').classList.remove('flex');
+    }
+
+    // Export CSV Backup
+    function exportCSV() {
+        if (chickens.length === 0) { alert("ไม่มีข้อมูลให้ส่งออก"); return; }
+        
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        csvContent += "กิ๊ฟปีก,ชื่อไก่,สถานะ,สายพันธุ์,วันเกิด,หมายเหตุ\n";
+
+        chickens.forEach(c => {
+            csvContent += `"${c.ringNumber || ''}","${c.name || ''}","${c.type || ''}","${c.breed || ''}","${c.birthDate || ''}","${(c.notes || '').replace(/\n/g, ' ')}"\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `chicken_records_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // App Initialization
     window.onload = loadChickens;
 </script>
 </body>

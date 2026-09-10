@@ -29,15 +29,6 @@
 
     <!-- Supabase JS Client v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <script>
-        const SUPABASE_URL = "https://ptquiexaqmgbglhozzfw.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cXVpZXhhcW1nYmdsaG96emZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2NzMyNjUsImV4cCI6MjEwNDI0OTI2NX0.fO7VdqGmwYSL-UB8JYKCrJ4xmPzfaPNyvkMYvbFRsro";
-        
-        // แก้ไขจุดดึงฟังก์ชัน createClient จาก CDN v2 ให้ถูกต้อง
-        const { createClient } = window.supabase;
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    </script>
 </head>
 <body class="flex justify-center">
 
@@ -59,12 +50,31 @@
 </div>
 
 <script>
+    const SUPABASE_URL = "https://ptquiexaqmgbglhozzfw.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cXVpZXhhcW1nYmdsaG96emZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2NzMyNjUsImV4cCI6MjEwNDI0OTI2NX0.fO7VdqGmwYSL-UB8JYKCrJ4xmPzfaPNyvkMYvbFRsro";
+    
+    let supabaseClient = null;
+
+    // ฟังก์ชันช่วยดึง client เพื่อป้องกันปัญหา CDN โหลดไม่ทัน
+    function getSupabase() {
+        if (!supabaseClient) {
+            const supabaseLib = window.supabase || window.supabaseClient;
+            if (supabaseLib && supabaseLib.createClient) {
+                supabaseClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            } else {
+                throw new Error("Supabase SDK ยังโหลดไม่เสร็จ กรุณารีเฟรชหน้าเว็บอีกครั้ง");
+            }
+        }
+        return supabaseClient;
+    }
+
     let chickens = [];
 
     async function loadChickens() {
         const content = document.getElementById('content');
         try {
-            const { data, error } = await supabase.from('chickens').select('*').order('created_at', { ascending: false });
+            const client = getSupabase();
+            const { data, error } = await client.from('chickens').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             chickens = data || [];
             renderHome();
@@ -140,7 +150,8 @@
         saveBtn.innerText = 'กำลังบันทึก...';
 
         try {
-            const { error } = await supabase.from('chickens').insert([{ ringNumber, name, type }]);
+            const client = getSupabase();
+            const { error } = await client.from('chickens').insert([{ ringNumber, name, type }]);
             if (error) throw error;
             await loadChickens();
         } catch (err) {
